@@ -14,6 +14,7 @@ import {
   Terminal,
   Loader2,
   Settings,
+  FlaskConical,
 } from "lucide-react";
 import { ConnectorTable } from "./connector-table";
 import { CreateConnectorDialog } from "./create-connector-dialog";
@@ -34,6 +35,8 @@ export function ConnectorDashboard() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [importExportOpen, setImportExportOpen] = React.useState(false);
   const [analysisConnector, setAnalysisConnector] = React.useState<Connector | null>(null);
+  const [errorForAnalysis, setErrorForAnalysis] = React.useState<string | null>(null);
+
 
   React.useEffect(() => {
     try {
@@ -81,7 +84,13 @@ export function ConnectorDashboard() {
   
   const handleAnalyzeError = (connector: Connector) => {
     setAnalysisConnector(connector);
+    setErrorForAnalysis(null);
   };
+  
+  const handleAnalyzeConnectionError = () => {
+    setErrorForAnalysis(error);
+    setAnalysisConnector(null);
+  }
 
   return (
     <div className="flex w-full flex-col">
@@ -131,10 +140,16 @@ export function ConnectorDashboard() {
             <Alert variant="destructive" className="mt-6">
               <Terminal className="h-4 w-4" />
               <AlertTitle>Failed to load connectors</AlertTitle>
-              <AlertDescription>
-                {error}
-                <Button variant="link" className="p-0 h-auto ml-2" onClick={() => router.push('/auth')}>
-                    Update Connection Details
+              <AlertDescription className="flex items-center justify-between">
+                <div>
+                    {error}
+                    <Button variant="link" className="p-0 h-auto ml-2" onClick={() => router.push('/auth')}>
+                        Update Connection Details
+                    </Button>
+                </div>
+                <Button variant="destructive" size="sm" onClick={handleAnalyzeConnectionError}>
+                  <FlaskConical className="mr-2" />
+                  Analyze Error
                 </Button>
               </AlertDescription>
             </Alert>
@@ -148,8 +163,14 @@ export function ConnectorDashboard() {
       <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} />
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
-        open={!!analysisConnector} 
-        onOpenChange={(open) => !open && setAnalysisConnector(null)} 
+        open={!!analysisConnector || !!errorForAnalysis} 
+        onOpenChange={(open) => {
+            if (!open) {
+                setAnalysisConnector(null);
+                setErrorForAnalysis(null);
+            }
+        }}
+        errorMessage={errorForAnalysis}
       />
     </div>
   );

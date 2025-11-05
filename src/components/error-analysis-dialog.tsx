@@ -18,21 +18,25 @@ type ErrorAnalysisDialogProps = {
   connector: Connector | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  errorMessage?: string | null;
 };
 
-export function ErrorAnalysisDialog({ connector, open, onOpenChange }: ErrorAnalysisDialogProps) {
+export function ErrorAnalysisDialog({ connector, open, onOpenChange, errorMessage }: ErrorAnalysisDialogProps) {
   const [loading, setLoading] = React.useState(false);
   const [analysis, setAnalysis] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  const errorToAnalyze = errorMessage || connector?.errorMessage;
+  const connectorName = connector?.name || "Connection Error";
+
   React.useEffect(() => {
-    if (open && connector?.errorMessage) {
+    if (open && errorToAnalyze) {
       setLoading(true);
       setAnalysis(null);
       setError(null);
 
       const performAnalysis = async () => {
-        const result = await getErrorAnalysis(connector.errorMessage!);
+        const result = await getErrorAnalysis(errorToAnalyze);
         if (result.data) {
           setAnalysis(result.data.solutions);
         } else {
@@ -43,7 +47,7 @@ export function ErrorAnalysisDialog({ connector, open, onOpenChange }: ErrorAnal
 
       performAnalysis();
     }
-  }, [open, connector]);
+  }, [open, errorToAnalyze]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,15 +55,15 @@ export function ErrorAnalysisDialog({ connector, open, onOpenChange }: ErrorAnal
         <DialogHeader>
           <DialogTitle>AI-Powered Error Analysis</DialogTitle>
           <DialogDescription>
-            Analyzing error for connector:{" "}
-            <span className="font-semibold text-primary">{connector?.name}</span>
+            Analyzing error for:{" "}
+            <span className="font-semibold text-primary">{connectorName}</span>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div>
             <h3 className="font-semibold mb-2">Original Error Message</h3>
             <pre className="text-xs p-4 rounded-md bg-muted text-muted-foreground whitespace-pre-wrap font-mono">
-              {connector?.errorMessage || "No error message available."}
+              {errorToAnalyze || "No error message available."}
             </pre>
           </div>
 
@@ -80,9 +84,7 @@ export function ErrorAnalysisDialog({ connector, open, onOpenChange }: ErrorAnal
               </Alert>
             )}
             {analysis && (
-              <div className="prose prose-sm max-w-none text-foreground">
-                <p>{analysis}</p>
-              </div>
+              <div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: analysis.replace(/\n/g, '<br />') }} />
             )}
           </div>
         </div>

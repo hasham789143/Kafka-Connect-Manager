@@ -4,7 +4,7 @@
 /**
  * @fileOverview An AI agent that analyzes Kafka connector errors and provides potential solutions.
  *
- * - analyzeError - A function that takes an error message and returns potential solutions.
+ * - analyzeError - a function that takes an error message and returns potential solutions.
  * - ErrorAnalysisInput - The input type for the analyzeError function.
  * - ErrorAnalysisOutput - The return type for the analyzeError function.
  */
@@ -30,7 +30,7 @@ const prompt = ai.definePrompt({
   name: 'errorAnalysisPrompt',
   input: {schema: ErrorAnalysisInputSchema},
   output: {schema: ErrorAnalysisOutputSchema},
-  prompt: `You are an expert Kafka Connect administrator.  A user has provided the following error message from a Kafka connector. Analyze the error message and provide potential solutions in natural language.\n\nError Message: {{{errorMessage}}}`,
+  prompt: `You are an expert Kafka Connect administrator. A user has provided the following error message from a Kafka connector. Analyze the error message and provide potential solutions in natural language.\n\nError Message: {{{errorMessage}}}`,
 });
 
 const errorAnalysisFlow = ai.defineFlow(
