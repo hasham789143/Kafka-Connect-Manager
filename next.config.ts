@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  env: {
+    KAFKA_CONNECT_URL: process.env.KAFKA_CONNECT_URL,
+    KAFKA_CONNECT_USERNAME: process.env.KAFKA_CONNECT_USERNAME,
+    KAFKA_CONNECT_PASSWORD: process.env.KAFKA_CONNECT_PASSWORD,
+  }
 };
 
 export default nextConfig;

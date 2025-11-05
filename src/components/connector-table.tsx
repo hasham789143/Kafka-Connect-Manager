@@ -1,6 +1,6 @@
 "use client";
 
-import { Connector, ConnectorStatus } from "@/lib/types";
+import { Connector, ConnectorStatus, Task } from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   Trash2,
   XCircle,
   FlaskConical,
+  CircleHelp,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,12 +36,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const statusIcons: Record<ConnectorStatus, React.ReactNode> = {
   RUNNING: <CheckCircle2 className="text-green-500" />,
   PAUSED: <PauseCircle className="text-yellow-500" />,
   FAILED: <XCircle className="text-red-500" />,
-  UNASSIGNED: <XCircle className="text-gray-500" />,
+  UNASSIGNED: <CircleHelp className="text-gray-500" />,
 };
 
 const statusBadgeVariants: Record<ConnectorStatus, "default" | "secondary" | "destructive" | "outline"> = {
@@ -48,6 +50,25 @@ const statusBadgeVariants: Record<ConnectorStatus, "default" | "secondary" | "de
     PAUSED: 'secondary',
     FAILED: 'destructive',
     UNASSIGNED: 'outline',
+};
+
+const TaskStatusIndicator = ({ task }: { task: Task }) => {
+  const statusIcon = statusIcons[task.state];
+  let tooltipContent = `Task ${task.id} on ${task.worker_id}: ${task.state}`;
+  if (task.state === 'FAILED' && task.trace) {
+    tooltipContent += `\n\nTrace:\n${task.trace}`;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-pointer">{statusIcon}</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-md whitespace-pre-wrap">
+        <p>{tooltipContent}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
 };
 
 
@@ -66,6 +87,7 @@ export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTablePro
               <TableHead>Status</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Tasks</TableHead>
               <TableHead>Topics</TableHead>
               <TableHead className="hidden md:table-cell">Plugin</TableHead>
               <TableHead>
@@ -91,7 +113,12 @@ export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTablePro
                     </div>
                   </TableCell>
                   <TableCell>
-                    {connector.topics.map(topic => <Badge key={topic} variant="outline" className="mr-1">{topic}</Badge>)}
+                    <div className="flex items-center gap-1.5">
+                      {connector.tasks.map(task => <TaskStatusIndicator key={task.id} task={task} />)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {connector.topics.map(topic => <Badge key={topic} variant="outline" className="mr-1 mb-1">{topic}</Badge>)}
                   </TableCell>
                   <TableCell className="hidden md:table-cell max-w-xs truncate">{connector.plugin}</TableCell>
                   <TableCell>
@@ -132,7 +159,7 @@ export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTablePro
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No connectors found.
                 </TableCell>
               </TableRow>

@@ -1,98 +1,91 @@
-import type { Connector } from './types';
+import type { Connector, ConnectorStatus, Task } from './types';
 
-export const connectors: Connector[] = [
-  {
-    id: 'jdbc-source-postgres-01',
-    name: 'jdbc-source-postgres-01',
-    status: 'RUNNING',
-    type: 'source',
-    plugin: 'io.confluent.connect.jdbc.JdbcSourceConnector',
-    topics: ['orders', 'customers'],
-    tasks: [
-      { id: 0, state: 'RUNNING', worker_id: 'connect-worker-1' },
-      { id: 1, state: 'RUNNING', worker_id: 'connect-worker-2' },
-    ],
-    config: {
-      'connector.class': 'io.confluent.connect.jdbc.JdbcSourceConnector',
-      'connection.url': 'jdbc:postgresql://postgres:5432/kafka_connect_db',
-      'mode': 'incrementing',
-      'incrementing.column.name': 'id',
-      'topic.prefix': 'postgres-',
-    },
-  },
-  {
-    id: 's3-sink-connector-01',
-    name: 's3-sink-connector-01',
-    status: 'RUNNING',
-    type: 'sink',
-    plugin: 'io.confluent.connect.s3.S3SinkConnector',
-    topics: ['user-activity'],
-    tasks: [
-      { id:0, state: 'RUNNING', worker_id: 'connect-worker-3' },
-    ],
-    config: {
-      'connector.class': 'io.confluent.connect.s3.S3SinkConnector',
-      's3.bucket.name': 'my-kafka-bucket',
-      'topics': 'user-activity',
-      'format.class': 'io.confluent.connect.s3.format.json.JsonFormat',
-    },
-  },
-  {
-    id: 'elasticsearch-sink-02',
-    name: 'elasticsearch-sink-02',
-    status: 'FAILED',
-    type: 'sink',
-    plugin: 'io.confluent.connect.elasticsearch.ElasticsearchSinkConnector',
-    topics: ['product-reviews'],
-    tasks: [
-      { id: 0, state: 'FAILED', worker_id: 'connect-worker-1', trace: 'org.apache.kafka.connect.errors.ConnectException: Exiting ElasticsearchSinkTask due to fatal error' }
-    ],
-    config: {
-      'connector.class': 'io.confluent.connect.elasticsearch.ElasticsearchSinkConnector',
-      'connection.url': 'http://elasticsearch:9200',
-      'type.name': '_doc',
-      'topics': 'product-reviews'
-    },
-    errorMessage: "org.apache.kafka.connect.errors.ConnectException: Couldn't connect to server. Check connection.url. Caused by: java.net.ConnectException: Connection refused",
-  },
-  {
-    id: 'datagen-source-customers',
-    name: 'datagen-source-customers',
-    status: 'PAUSED',
-    type: 'source',
-    plugin: 'io.confluent.kafka.connect.datagen.DatagenConnector',
-    topics: ['generated-customers'],
-    tasks: [
-       { id: 0, state: 'PAUSED', worker_id: 'connect-worker-2' },
-    ],
-    config: {
-        'connector.class': 'io.confluent.kafka.connect.datagen.DatagenConnector',
-        'kafka.topic': 'generated-customers',
-        'quickstart': 'customers',
-        'max.interval': '1000'
+async function fetchFromConnect(endpoint: string) {
+  const url = process.env.KAFKA_CONNECT_URL;
+  const username = process.env.KAFKA_CONNECT_USERNAME;
+  const password = process.env.KAFKA_CONNECT_PASSWORD;
+
+  if (!url) {
+    console.error('KAFKA_CONNECT_URL is not defined in the environment variables.');
+    return { error: 'Kafka Connect URL is not configured.' };
+  }
+
+  const headers: HeadersInit = {
+    'Accept': 'application/json',
+  };
+
+  if (username && password) {
+    headers['Authorization'] = 'Basic ' + btoa(`${username}:${password}`);
+  }
+
+  try {
+    const response = await fetch(`${url}${endpoint}`, { headers });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Failed to fetch from ${endpoint}: ${response.status} ${response.statusText}`, errorText);
+       if (response.status === 403) {
+        return { error: `Connection to Kafka Connect API at ${url} was forbidden. Please check network access and credentials.` };
+      }
+      return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
     }
-  },
-  {
-    id: 'another-jdbc-source',
-    name: 'another-jdbc-source',
-    status: 'RUNNING',
-    type: 'source',
-    plugin: 'io.confluent.connect.jdbc.JdbcSourceConnector',
-    topics: ['inventory'],
-    tasks: [
-      { id: 0, state: 'RUNNING', worker_id: 'connect-worker-3' },
-    ],
-    config: {
-      'connector.class': 'io.confluent.connect.jdbc.JdbcSourceConnector',
-      'connection.url': 'jdbc:mysql://mysql:3306/inventory_db',
-      'mode': 'timestamp',
-      'timestamp.column.name': 'updated_at',
-      'topic.prefix': 'mysql-',
-    },
-  },
-];
+    
+    try {
+      return { data: await response.json() };
+    } catch(e) {
+      // The GIST of this is that the kafka connect API sometimes returns non-json on success
+      return { data: await response.text() };
+    }
+  } catch (e: any) {
+    console.error(`Network error when fetching from ${endpoint}:`, e);
+    return { error: `Could not connect to Kafka Connect API at ${url}. Please check if the service is running and accessible.` };
+  }
+}
 
-export async function getConnectors(): Promise<Connector[]> {
-  // In a real app, you'd fetch this from your Cloud SQL database
-  return new Promise(resolve => setTimeout(() => resolve(connectors), 500));
+export async function getConnectors(): Promise<{ connectors?: Connector[], error?: string }> {
+  const connectorsResponse = await fetchFromConnect('/connectors');
+
+  if (connectorsResponse.error) {
+    return { error: connectorsResponse.error };
+  }
+  const connectorNames = connectorsResponse.data;
+
+  const connectorDetailsPromises = Object.keys(connectorNames).map(async (name: string) => {
+    const statusResponse = await fetchFromConnect(`/connectors/${name}/status`);
+    if (statusResponse.error) return { id: name, name, error: statusResponse.error };
+    const configResponse = await fetchFromConnect(`/connectors/${name}/config`);
+    if (configResponse.error) return { id: name, name, error: configResponse.error };
+
+    const status = statusResponse.data;
+    const config = configResponse.data;
+
+    const tasks: Task[] = status.tasks.map((task: any) => ({
+      id: task.id,
+      state: task.state,
+      worker_id: task.worker_id,
+      trace: task.trace,
+    }));
+    
+    const failedTasks = tasks.filter(t => t.state === 'FAILED');
+
+    return {
+      id: name,
+      name: status.name,
+      status: status.connector.state as ConnectorStatus,
+      type: status.type,
+      plugin: config['connector.class'],
+      tasks: tasks,
+      config: config,
+      errorMessage: failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined,
+      topics: status.tasks.flatMap((t: any) => t.topics || []),
+    };
+  });
+
+  const connectors = await Promise.all(connectorDetailsPromises);
+  const firstError = connectors.find(c => (c as any).error);
+  if (firstError) {
+      return { error: (firstError as any).error };
+  }
+
+  return { connectors: connectors as Connector[] };
 }

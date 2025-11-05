@@ -27,6 +27,7 @@ export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorD
   const [addKafkaContainerOpen, setAddKafkaContainerOpen] = React.useState(false);
 
   const filteredConnectors = React.useMemo(() => {
+    if (!initialConnectors) return [];
     if (!searchTerm) return initialConnectors;
     return initialConnectors.filter(
       (c) =>
