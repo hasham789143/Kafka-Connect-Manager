@@ -35,6 +35,7 @@ export function ConnectorDashboard() {
   const [importExportOpen, setImportExportOpen] = React.useState(false);
   const [analysisConnector, setAnalysisConnector] = React.useState<Connector | null>(null);
   const [errorForAnalysis, setErrorForAnalysis] = React.useState<string | null>(null);
+  const [selectedConnectors, setSelectedConnectors] = React.useState<string[]>([]);
 
 
   React.useEffect(() => {
@@ -97,11 +98,15 @@ export function ConnectorDashboard() {
     }
   }
 
+  const handleSelectionChange = (newSelection: string[]) => {
+    setSelectedConnectors(newSelection);
+  };
+
   return (
     <div className="flex w-full flex-col">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Connectors</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Connectors ({connectors.length})</h1>
           <p className="text-muted-foreground">
             Manage your Kafka Connect connectors.
           </p>
@@ -160,12 +165,22 @@ export function ConnectorDashboard() {
             </Alert>
         )}
         {!loading && !error && (
-            <ConnectorTable connectors={filteredConnectors} onAnalyzeError={handleAnalyzeError} />
+            <ConnectorTable 
+              connectors={filteredConnectors} 
+              onAnalyzeError={handleAnalyzeError}
+              selectedConnectors={selectedConnectors}
+              onSelectionChange={handleSelectionChange}
+            />
         )}
       </main>
 
       <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} onSuccess={refreshConnectors} />
-      <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} onSuccess={refreshConnectors}/>
+      <ImportExportDialog 
+        open={importExportOpen} 
+        onOpenChange={setImportExportOpen} 
+        onSuccess={refreshConnectors}
+        selectedConnectors={selectedConnectors}
+      />
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
         open={!!analysisConnector || !!errorForAnalysis} 

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Connector, ConnectorStatus, Task } from "@/lib/types";
 import {
   Table,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -36,7 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "./ui/tooltip";
 
 const statusIcons: Record<ConnectorStatus, React.ReactNode> = {
   RUNNING: <CheckCircle2 className="text-green-500" />,
@@ -60,14 +62,16 @@ const TaskStatusIndicator = ({ task }: { task: Task }) => {
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="cursor-pointer">{statusIcon}</span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-md whitespace-pre-wrap">
-        <p>{tooltipContent}</p>
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-pointer">{statusIcon}</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-md whitespace-pre-wrap">
+          <p>{tooltipContent}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
@@ -75,15 +79,40 @@ const TaskStatusIndicator = ({ task }: { task: Task }) => {
 type ConnectorTableProps = {
   connectors: Connector[];
   onAnalyzeError: (connector: Connector) => void;
+  selectedConnectors: string[];
+  onSelectionChange: (selected: string[]) => void;
 };
 
-export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTableProps) {
+export function ConnectorTable({ connectors, onAnalyzeError, selectedConnectors, onSelectionChange }: ConnectorTableProps) {
+  const handleSelectAll = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      onSelectionChange(connectors.map(c => c.name));
+    } else {
+      onSelectionChange([]);
+    }
+  };
+
+  const handleSelectRow = (name: string, checked: boolean) => {
+    if (checked) {
+      onSelectionChange([...selectedConnectors, name]);
+    } else {
+      onSelectionChange(selectedConnectors.filter(n => n !== name));
+    }
+  };
+
   return (
     <Card>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox 
+                  checked={selectedConnectors.length === connectors.length && connectors.length > 0 ? true : (selectedConnectors.length > 0 ? 'indeterminate' : false)}
+                  onCheckedChange={handleSelectAll}
+                  aria-label="Select all rows"
+                />
+              </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
@@ -98,7 +127,14 @@ export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTablePro
           <TableBody>
             {connectors.length > 0 ? (
               connectors.map((connector) => (
-                <TableRow key={connector.id}>
+                <TableRow key={connector.id} data-state={selectedConnectors.includes(connector.name) ? 'selected' : ''}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedConnectors.includes(connector.name)}
+                      onCheckedChange={(checked) => handleSelectRow(connector.name, !!checked)}
+                      aria-label={`Select row for ${connector.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Badge variant={statusBadgeVariants[connector.status]} className="gap-1.5 pl-1.5">
                       {statusIcons[connector.status]}
@@ -159,7 +195,7 @@ export function ConnectorTable({ connectors, onAnalyzeError }: ConnectorTablePro
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   No connectors found.
                 </TableCell>
               </TableRow>

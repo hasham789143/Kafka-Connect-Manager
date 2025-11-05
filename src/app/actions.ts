@@ -40,12 +40,19 @@ export async function createConnectorAction(config: KafkaConnectConfig, name: st
     return { success: true };
 }
 
-export async function exportConnectorsAction(config: KafkaConnectConfig): Promise<{ data?: string, error?: string }> {
-    const { connectors, error } = await getConnectors(config);
-    if (error) {
-        return { error };
+export async function exportConnectorsAction(config: KafkaConnectConfig, connectorNames: string[]): Promise<{ data?: string, error?: string }> {
+    const { connectors, error: getConnectorsError } = await getConnectors(config);
+    if (getConnectorsError) {
+        return { error: getConnectorsError };
     }
-    const exportData = await exportConnectors(config, connectors?.map(c => c.name) || []);
+
+    const namesToExport = connectorNames.length > 0 ? connectorNames : connectors?.map(c => c.name) || [];
+
+    if (namesToExport.length === 0) {
+        return { error: "No connectors found to export." };
+    }
+
+    const exportData = await exportConnectors(config, namesToExport);
     if (exportData.error) {
         return { error: exportData.error };
     }

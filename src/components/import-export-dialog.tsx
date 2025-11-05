@@ -24,9 +24,10 @@ type ImportExportDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  selectedConnectors: string[];
 };
 
-export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExportDialogProps) {
+export function ImportExportDialog({ open, onOpenChange, onSuccess, selectedConnectors }: ImportExportDialogProps) {
   const { toast } = useToast();
   const [config, setConfig] = React.useState<KafkaConnectConfig | null>(null);
   const [exporting, setExporting] = React.useState(false);
@@ -58,7 +59,7 @@ export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExpo
       return;
     }
     setExporting(true);
-    const { data, error } = await exportConnectorsAction(config);
+    const { data, error } = await exportConnectorsAction(config, selectedConnectors);
     setExporting(false);
 
     if (error) {
@@ -68,12 +69,15 @@ export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExpo
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'kafka-connectors.json';
+      a.download = `kafka-connectors${selectedConnectors.length > 0 ? '-selected' : ''}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast({ title: "Export Successful", description: "Connector configurations have been downloaded." });
+      const description = selectedConnectors.length > 0 
+        ? `${selectedConnectors.length} selected connector configurations have been downloaded.`
+        : "All connector configurations have been downloaded.";
+      toast({ title: "Export Successful", description });
     }
   };
 
@@ -96,7 +100,12 @@ export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExpo
       try {
         const content = event.target?.result as string;
         const connectorsToImport = JSON.parse(content);
-        const formattedConnectors = Object.entries(connectorsToImport).map(([name, config]) => ({ name, config }));
+        
+        // Support both array of {name, config} and object of {name: config}
+        const formattedConnectors = Array.isArray(connectorsToImport)
+            ? connectorsToImport
+            : Object.entries(connectorsToImport).map(([name, config]) => ({ name, config }));
+
         const results = await importConnectorsAction(config, formattedConnectors);
         setImportResults(results);
 
@@ -119,6 +128,11 @@ export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExpo
     };
     reader.readAsText(importFile);
   };
+
+  const exportButtonText = selectedConnectors.length > 0 ? `Export ${selectedConnectors.length} Selected` : 'Export All Connectors';
+  const exportDescription = selectedConnectors.length > 0 
+    ? `Export the configuration for the ${selectedConnectors.length} selected connector(s) to a JSON file.`
+    : "Export all current connector configurations to a single JSON file. To export specific connectors, select them in the table first.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -163,11 +177,11 @@ export function ImportExportDialog({ open, onOpenChange, onSuccess }: ImportExpo
           <TabsContent value="export">
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">
-                Export all current connector configurations to a single JSON file.
+                {exportDescription}
               </p>
               <Button className="w-full" onClick={handleExport} disabled={exporting}>
                 {exporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Export All Connectors
+                {exportButtonText}
               </Button>
             </div>
           </TabsContent>
