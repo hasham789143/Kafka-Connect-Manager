@@ -62,22 +62,20 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
 }
 
 export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], error?: string }> {
-  const connectorsResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors`, config);
+  const connectorsResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors?expand=status&expand=info`, config);
 
   if (connectorsResponse.error || !connectorsResponse.data) {
     return { error: connectorsResponse.error || 'Failed to fetch connectors.' };
   }
   
   const connectorData = connectorsResponse.data;
-  const connectorNames = Array.isArray(connectorData) ? connectorData : Object.keys(connectorData);
+  const connectorNames = Array.isArray(connectorData) ? connectorData.map(c => c.name) : Object.keys(connectorData);
   
   const connectors: Connector[] = [];
 
   for (const name of connectorNames) {
     const statusResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors/${name}/status`, config);
     if (statusResponse.error) {
-      // If one connector fails, we can choose to return what we have or fail all.
-      // For now, we fail all to be safe, but we could make this more resilient.
       return { error: `Failed to get status for connector ${name}: ${statusResponse.error}` };
     }
     const configResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors/${name}/config`, config);
@@ -96,7 +94,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     })) : [];
     
     const failedTasks = tasks ? tasks.filter(t => t.state === 'FAILED') : [];
-    const errorMessage = (failedTasks && failedTasks.length > 0) ? failedTasks.map(t => t.trace).join('\n') : undefined;
+    const errorMessage = failedTasks && failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined;
 
     connectors.push({
       id: name,
@@ -107,7 +105,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
       tasks: tasks,
       config: connectorConfig,
       errorMessage: errorMessage,
-      topics: status.topics || [],
+      topics: [], // Topics are not available in this endpoint structure, default to empty
     });
   }
 
