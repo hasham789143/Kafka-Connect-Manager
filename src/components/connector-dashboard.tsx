@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -12,17 +13,19 @@ import {
   Search,
   Terminal,
   Loader2,
+  Settings,
 } from "lucide-react";
 import { ConnectorTable } from "./connector-table";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 import { ImportExportDialog } from "./import-export-dialog";
 import { ErrorAnalysisDialog } from "./error-analysis-dialog";
-import { AddKafkaContainerDialog } from "./add-kafka-container-dialog";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useRouter } from "next/navigation";
 
 const KAFKA_CONNECT_CONFIG_KEY = 'kafka-connect-config';
 
 export function ConnectorDashboard() {
+  const router = useRouter();
   const [connectors, setConnectors] = React.useState<Connector[]>([]);
   const [config, setConfig] = React.useState<KafkaConnectConfig | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -31,7 +34,6 @@ export function ConnectorDashboard() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [importExportOpen, setImportExportOpen] = React.useState(false);
   const [analysisConnector, setAnalysisConnector] = React.useState<Connector | null>(null);
-  const [addKafkaContainerOpen, setAddKafkaContainerOpen] = React.useState(false);
 
   React.useEffect(() => {
     try {
@@ -40,15 +42,13 @@ export function ConnectorDashboard() {
         const parsedConfig = JSON.parse(storedConfig);
         setConfig(parsedConfig);
       } else {
-        setAddKafkaContainerOpen(true);
-        setLoading(false);
+        router.push('/auth');
       }
     } catch (e) {
       console.error("Could not parse kafka config from local storage", e);
-      setAddKafkaContainerOpen(true);
-      setLoading(false);
+      router.push('/auth');
     }
-  }, []);
+  }, [router]);
 
   const fetchConnectors = React.useCallback(async (currentConfig: KafkaConnectConfig) => {
     setLoading(true);
@@ -67,16 +67,6 @@ export function ConnectorDashboard() {
       fetchConnectors(config);
     }
   }, [config, fetchConnectors]);
-  
-  const handleConfigSave = (newConfig: KafkaConnectConfig) => {
-    try {
-        localStorage.setItem(KAFKA_CONNECT_CONFIG_KEY, JSON.stringify(newConfig));
-    } catch (e) {
-        console.error("Could not save kafka config to local storage", e);
-    }
-    setConfig(newConfig);
-    setAddKafkaContainerOpen(false);
-  };
 
   const filteredConnectors = React.useMemo(() => {
     if (!connectors) return [];
@@ -118,9 +108,9 @@ export function ConnectorDashboard() {
               <ArrowRightLeft />
               Import / Export
             </Button>
-            <Button className="flex-1" onClick={() => setAddKafkaContainerOpen(true)}>
-              <PlusCircle />
-              Add Kafka Container
+            <Button variant="outline" className="flex-1" onClick={() => router.push('/auth')}>
+              <Settings />
+              Connection
             </Button>
             <Button className="flex-1" onClick={() => setCreateOpen(true)}>
               <PlusCircle />
@@ -143,7 +133,7 @@ export function ConnectorDashboard() {
               <AlertTitle>Failed to load connectors</AlertTitle>
               <AlertDescription>
                 {error}
-                <Button variant="link" className="p-0 h-auto ml-2" onClick={() => setAddKafkaContainerOpen(true)}>
+                <Button variant="link" className="p-0 h-auto ml-2" onClick={() => router.push('/auth')}>
                     Update Connection Details
                 </Button>
               </AlertDescription>
@@ -156,12 +146,6 @@ export function ConnectorDashboard() {
 
       <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} />
       <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} />
-      <AddKafkaContainerDialog 
-        open={addKafkaContainerOpen} 
-        onOpenChange={setAddKafkaContainerOpen}
-        onSave={handleConfigSave}
-        currentConfig={config}
-      />
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
         open={!!analysisConnector} 
