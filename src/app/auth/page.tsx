@@ -66,7 +66,7 @@ export default function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-gray-900">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl">Please sign in</CardTitle>
+          <CardTitle className="text-2xl">Connect to Kafka</CardTitle>
           <CardDescription>
             Enter your Kafka Connect credentials
           </CardDescription>

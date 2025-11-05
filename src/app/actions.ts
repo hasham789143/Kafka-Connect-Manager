@@ -1,7 +1,8 @@
 'use server';
 
 import { analyzeError } from '@/ai/flows/error-analysis';
-import { getConnectors, KafkaConnectConfig, testConnection } from '@/lib/data';
+import { getConnectors, KafkaConnectConfig, testConnection, createConnector, exportConnectors } from '@/lib/data';
+import { Connector } from './lib/types';
 
 export async function getErrorAnalysis(errorMessage: string) {
   if (!errorMessage) {
@@ -29,4 +30,33 @@ export async function validateConnection(config: KafkaConnectConfig) {
         return { success: false, error };
     }
     return { success: true };
+}
+
+export async function createConnectorAction(config: KafkaConnectConfig, name: string, connectorConfig: any) {
+    const { error } = await createConnector(config, name, connectorConfig);
+    if (error) {
+        return { success: false, error };
+    }
+    return { success: true };
+}
+
+export async function exportConnectorsAction(config: KafkaConnectConfig): Promise<{ data?: string, error?: string }> {
+    const { connectors, error } = await getConnectors(config);
+    if (error) {
+        return { error };
+    }
+    const exportData = await exportConnectors(config, connectors?.map(c => c.name) || []);
+    if (exportData.error) {
+        return { error: exportData.error };
+    }
+    return { data: JSON.stringify(exportData.configs, null, 2) };
+}
+
+export async function importConnectorsAction(config: KafkaConnectConfig, connectorsToImport: { name: string, config: any }[]) {
+  const results = [];
+  for (const connector of connectorsToImport) {
+    const { error } = await createConnector(config, connector.name, connector.config);
+    results.push({ name: connector.name, success: !error, error });
+  }
+  return results;
 }

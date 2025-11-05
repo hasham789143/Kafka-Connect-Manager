@@ -1,5 +1,5 @@
 
-import type { Connector, ConnectorStatus, Task } from './types';
+import type { Connector, ConnectorStatus, ConnectorType, Task } from './types';
 
 export type KafkaConnectConfig = {
   url: string;
@@ -29,7 +29,7 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig, me
   }
 
   try {
-    const response = await fetch(`${url}${endpoint}`, { 
+    const response = await fetch(`${url.replace(/\/$/, '')}${endpoint}`, { 
         method,
         headers, 
         cache: 'no-store',
@@ -48,12 +48,21 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig, me
       if (response.status === 406) {
         return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status} (Not Acceptable). The server cannot provide a response in the requested format.` };
       }
-      return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
+      try {
+        const errorJson = JSON.parse(errorText);
+        return { error: errorJson.message || `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
+      } catch (e) {
+        return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
+      }
     }
     
     // Handle empty response for validation
-    if (response.status === 200 && endpoint === '/') {
+    if (response.status === 200 && (endpoint === '/' || endpoint === '')) {
         return { data: {} };
+    }
+    
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return { data: {} };
     }
 
     if (response.headers.get('content-type')?.includes('application/json')) {
@@ -79,7 +88,7 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig, me
 }
 
 export async function testConnection(config: KafkaConnectConfig): Promise<{ error?: string }> {
-    const response = await fetchFromConnect('/', config);
+    const response = await fetchFromConnect('', config);
     return { error: response.error };
 }
 
@@ -113,7 +122,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     }));
 
     const failedTasks = tasks.filter(t => t.state === 'FAILED');
-    const errorMessage = failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined;
+    const errorMessage = failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\\n') : undefined;
 
     connectors.push({
       id: name,
@@ -129,4 +138,23 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
   }
 
   return { connectors };
+}
+
+export async function createConnector(config: KafkaConnectConfig, name: string, connectorConfig: any) {
+    return fetchFromConnect(`${CLUSTER_PATH}/connectors`, config, 'POST', {
+        name,
+        config: connectorConfig
+    });
+}
+
+export async function exportConnectors(config: KafkaConnectConfig, connectorNames: string[]): Promise<{ configs?: Record<string, any>, error?: string }> {
+    const configs: Record<string, any> = {};
+    for (const name of connectorNames) {
+        const response = await fetchFromConnect(`${CLUSTER_PATH}/connectors/${name}/config`, config);
+        if (response.error) {
+            return { error: `Failed to fetch config for ${name}: ${response.error}` };
+        }
+        configs[name] = response.data;
+    }
+    return { configs };
 }

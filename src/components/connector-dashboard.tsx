@@ -90,6 +90,12 @@ export function ConnectorDashboard() {
     setErrorForAnalysis(error);
     setAnalysisConnector(null);
   }
+  
+  const refreshConnectors = () => {
+    if (config) {
+        fetchConnectors(config);
+    }
+  }
 
   return (
     <div className="flex w-full flex-col">
@@ -158,8 +164,8 @@ export function ConnectorDashboard() {
         )}
       </main>
 
-      <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} />
+      <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} onSuccess={refreshConnectors} />
+      <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} onSuccess={refreshConnectors}/>
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
         open={!!analysisConnector || !!errorForAnalysis} 

@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "./ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,29 +24,51 @@ import {
   FormMessage,
 } from "./ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { createConnectorAction } from "@/app/actions";
+import * as React from "react";
+import { KafkaConnectConfig } from "@/lib/data";
+
+const KAFKA_CONNECT_CONFIG_KEY = 'kafka-connect-config';
 
 const formSchema = z.object({
   name: z.string().min(1, "Connector name is required."),
-  config: z.string().refine(
-    (val) => {
-      try {
-        JSON.parse(val);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    },
-    { message: "Configuration must be valid JSON." }
-  ),
+  config: z
+    .string()
+    .min(1, "Configuration is required.")
+    .refine(
+      (val) => {
+        try {
+          JSON.parse(val);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      },
+      { message: "Configuration must be valid JSON." }
+    ),
 });
 
 type CreateConnectorDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
 };
 
-export function CreateConnectorDialog({ open, onOpenChange }: CreateConnectorDialogProps) {
+export function CreateConnectorDialog({ open, onOpenChange, onSuccess }: CreateConnectorDialogProps) {
     const { toast } = useToast();
+    const [config, setConfig] = React.useState<KafkaConnectConfig | null>(null);
+
+    React.useEffect(() => {
+        try {
+            const storedConfig = localStorage.getItem(KAFKA_CONNECT_CONFIG_KEY);
+            if (storedConfig) {
+                setConfig(JSON.parse(storedConfig));
+            }
+        } catch (e) {
+            console.error("Could not parse kafka config from local storage", e);
+        }
+    }, []);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -61,14 +82,32 @@ export function CreateConnectorDialog({ open, onOpenChange }: CreateConnectorDia
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    toast({
-      title: "Connector creation submitted",
-      description: "Your new connector is being created.",
-    });
-    onOpenChange(false);
-    form.reset();
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!config) {
+        toast({
+            variant: "destructive",
+            title: "Connection details are missing",
+            description: "Could not find Kafka Connect configuration.",
+        });
+        return;
+    }
+    const result = await createConnectorAction(config, values.name, JSON.parse(values.config));
+
+    if (result.success) {
+      toast({
+        title: "Connector created successfully",
+        description: `Connector '${values.name}' has been created.`,
+      });
+      onSuccess();
+      onOpenChange(false);
+      form.reset();
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Failed to create connector",
+            description: result.error,
+        });
+    }
   }
 
   return (
@@ -119,7 +158,10 @@ export function CreateConnectorDialog({ open, onOpenChange }: CreateConnectorDia
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Create Connector</Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Connector
+              </Button>
             </DialogFooter>
           </form>
         </Form>
