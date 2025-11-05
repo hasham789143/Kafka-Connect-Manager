@@ -78,6 +78,12 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     const status = connectorData.status;
     const info = connectorData.info;
 
+    // A connector might not have status or info if it's in a strange state.
+    if (!status || !info) {
+        console.warn(`Skipping connector ${name} due to missing status or info`);
+        continue;
+    }
+
     const tasks: Task[] = (status.tasks || []).map((task: any) => ({
       id: task.id,
       state: task.state,
