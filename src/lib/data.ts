@@ -31,6 +31,9 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
        if (response.status === 401 || response.status === 403) {
         return { error: `Connection to Kafka Connect API at ${url} was forbidden/unauthorized. Please check credentials.` };
       }
+      if (response.status === 406) {
+        return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status} (Not Acceptable). The server cannot provide a response in the requested format.` };
+      }
       return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
     }
     
@@ -41,12 +44,16 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
 
   } catch (e: any) {
     console.error(`Network error when fetching from ${endpoint}:`, e);
-    // Check for common fetch errors
-    if (e.cause?.code === 'ENOTFOUND') {
+    
+    const cause = e.cause as any;
+    if (cause?.code === 'ECONNRESET') {
+        return { error: `The connection to the Kafka Connect API at ${url} was reset. This can happen if the server is under heavy load or has a connection limit. Error: ${cause.code}` };
+    }
+    if (cause?.code === 'ENOTFOUND') {
         return { error: `Could not resolve the address for the Kafka Connect API at ${url}. Please check the URL and your network connection.` };
     }
     if (e instanceof TypeError && e.message.includes('fetch failed')) {
-       return { error: `Network error when fetching from ${url}. The host may be down or a firewall may be blocking the connection.`};
+       return { error: `Network error when fetching from ${url}. The host may be down, or a firewall may be blocking the connection.`};
     }
     return { error: `Could not connect to Kafka Connect API at ${url}. Please check if the service is running and accessible.` };
   }
@@ -59,22 +66,25 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     return { error: connectorsResponse.error || 'Failed to fetch connectors.' };
   }
 
-  // Kafka Connect returns an empty object {} if there are no connectors.
-  // It returns an array of names if there are connectors. Handle both cases.
   const connectorData = connectorsResponse.data;
   const connectorNames = Array.isArray(connectorData) ? connectorData : Object.keys(connectorData);
+  
+  const connectors: Connector[] = [];
 
-
-  const connectorDetailsPromises = connectorNames.map(async (name: string) => {
+  for (const name of connectorNames) {
     const statusResponse = await fetchFromConnect(`/connectors/${name}/status`, config);
-    if (statusResponse.error) return { id: name, name, error: statusResponse.error };
+    if (statusResponse.error) {
+      return { error: statusResponse.error };
+    }
     const configResponse = await fetchFromConnect(`/connectors/${name}/config`, config);
-    if (configResponse.error) return { id: name, name, error: configResponse.error };
+     if (configResponse.error) {
+      return { error: configResponse.error };
+    }
 
     const status = statusResponse.data;
     const connectorConfig = configResponse.data;
 
-    const tasks: Task[] = Array.isArray(status.tasks) ? status.tasks.map((task: any) => ({
+    const tasks: Task[] = (status.tasks && Array.isArray(status.tasks)) ? status.tasks.map((task: any) => ({
       id: task.id,
       state: task.state,
       worker_id: task.worker_id,
@@ -82,25 +92,20 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     })) : [];
     
     const failedTasks = tasks ? tasks.filter(t => t.state === 'FAILED') : [];
+    const errorMessage = (failedTasks && failedTasks.length > 0) ? failedTasks.map(t => t.trace).join('\n') : undefined;
 
-    return {
+    connectors.push({
       id: name,
       name: status.name,
-      status: status.connector?.state as ConnectorStatus,
+      status: (status.connector?.state as ConnectorStatus) || 'UNASSIGNED',
       type: status.type,
       plugin: connectorConfig['connector.class'],
       tasks: tasks,
       config: connectorConfig,
-      errorMessage: failedTasks && failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined,
-      topics: Array.isArray(status.tasks) ? status.tasks.flatMap((t: any) => t.topics || []) : [],
-    };
-  });
-
-  const connectors = await Promise.all(connectorDetailsPromises);
-  const firstError = connectors.find(c => (c as any).error);
-  if (firstError) {
-      return { error: (firstError as any).error };
+      errorMessage: errorMessage,
+      topics: status.topics || [],
+    });
   }
 
-  return { connectors: connectors as Connector[] };
+  return { connectors };
 }
