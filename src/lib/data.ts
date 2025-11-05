@@ -74,12 +74,12 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     const status = statusResponse.data;
     const connectorConfig = configResponse.data;
 
-    const tasks: Task[] = status.tasks.map((task: any) => ({
+    const tasks: Task[] = Array.isArray(status.tasks) ? status.tasks.map((task: any) => ({
       id: task.id,
       state: task.state,
       worker_id: task.worker_id,
       trace: task.trace,
-    }));
+    })) : [];
     
     const failedTasks = tasks.filter(t => t.state === 'FAILED');
 
@@ -92,7 +92,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
       tasks: tasks,
       config: connectorConfig,
       errorMessage: failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined,
-      topics: status.tasks.flatMap((t: any) => t.topics || []),
+      topics: Array.isArray(status.tasks) ? status.tasks.flatMap((t: any) => t.topics || []) : [],
     };
   });
 
