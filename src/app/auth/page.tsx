@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import { validateConnection } from "@/app/actions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Terminal, Loader2 } from "lucide-react";
 
 const KAFKA_CONNECT_CONFIG_KEY = 'kafka-connect-config';
 
@@ -22,6 +25,8 @@ export default function AuthPage() {
     const [url, setUrl] = React.useState("https://poc-kafka.vitonta.com/");
     const [username, setUsername] = React.useState("admin");
     const [password, setPassword] = React.useState("P@ssw0rd@kafka");
+    const [error, setError] = React.useState<string | null>(null);
+    const [loading, setLoading] = React.useState(false);
 
     React.useEffect(() => {
         try {
@@ -37,14 +42,24 @@ export default function AuthPage() {
         }
     }, []);
 
-    const handleSignIn = () => {
-        try {
-            const config = { url, username, password };
-            localStorage.setItem(KAFKA_CONNECT_CONFIG_KEY, JSON.stringify(config));
-            router.push('/dashboard');
-        } catch (e) {
-            console.error("Could not save kafka config to local storage", e);
+    const handleSignIn = async () => {
+        setLoading(true);
+        setError(null);
+        const config = { url, username, password };
+        const result = await validateConnection(config);
+
+        if (result.success) {
+            try {
+                localStorage.setItem(KAFKA_CONNECT_CONFIG_KEY, JSON.stringify(config));
+                router.push('/dashboard');
+            } catch (e) {
+                console.error("Could not save kafka config to local storage", e);
+                setError("Failed to save connection details to your browser's local storage.");
+            }
+        } else {
+            setError(result.error || "An unknown error occurred during validation.");
         }
+        setLoading(false);
     };
 
   return (
@@ -57,12 +72,19 @@ export default function AuthPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Connection Failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label htmlFor="url">Kafka Connect URL</Label>
             <Input id="url" placeholder="https://kafka-connect:8083" required value={url} onChange={e => setUrl(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="username">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input id="username" placeholder="admin" required value={username} onChange={e => setUsername(e.target.value)} />
           </div>
           <div className="space-y-2">
@@ -71,7 +93,10 @@ export default function AuthPage() {
           </div>
         </CardContent>
         <CardFooter>
-          <Button className="w-full" onClick={handleSignIn}>Sign in</Button>
+          <Button className="w-full" onClick={handleSignIn} disabled={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sign in
+          </Button>
         </CardFooter>
       </Card>
     </div>

@@ -1,7 +1,7 @@
 'use server';
 
 import { analyzeError } from '@/ai/flows/error-analysis';
-import { getConnectors, KafkaConnectConfig } from '@/lib/data';
+import { getConnectors, KafkaConnectConfig, testConnection } from '@/lib/data';
 
 export async function getErrorAnalysis(errorMessage: string) {
   if (!errorMessage) {
@@ -21,4 +21,12 @@ export async function getErrorAnalysis(errorMessage: string) {
 
 export async function getConnectorsAction(config: KafkaConnectConfig) {
     return getConnectors(config);
+}
+
+export async function validateConnection(config: KafkaConnectConfig) {
+    const { error } = await testConnection(config);
+    if (error) {
+        return { success: false, error };
+    }
+    return { success: true };
 }

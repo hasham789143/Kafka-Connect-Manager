@@ -9,7 +9,7 @@ export type KafkaConnectConfig = {
 
 const CLUSTER_PATH = '/clusters/local';
 
-async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
+async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', body?: any) {
   const { url, username, password } = config;
 
   if (!url) {
@@ -20,19 +20,30 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
   const headers: HeadersInit = {
     'Accept': 'application/json, text/plain, */*',
   };
+   if (method !== 'GET') {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (username && password) {
     headers['Authorization'] = 'Basic ' + btoa(`${username}:${password}`);
   }
 
   try {
-    const response = await fetch(`${url}${endpoint}`, { headers, cache: 'no-store' });
+    const response = await fetch(`${url}${endpoint}`, { 
+        method,
+        headers, 
+        cache: 'no-store',
+        body: body ? JSON.stringify(body) : undefined,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Failed to fetch from ${endpoint}: ${response.status} ${response.statusText}`, errorText);
-       if (response.status === 401 || response.status === 403) {
-        return { error: `Connection to Kafka Connect API at ${url} was forbidden/unauthorized. Please check credentials.` };
+       if (response.status === 401) {
+        return { error: `Authentication failed. Please check your username and password.` };
+      }
+      if (response.status === 403) {
+        return { error: `Connection forbidden. You do not have permission to access the Kafka Connect API.` };
       }
       if (response.status === 406) {
         return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status} (Not Acceptable). The server cannot provide a response in the requested format.` };
@@ -40,6 +51,11 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
       return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
     }
     
+    // Handle empty response for validation
+    if (response.status === 200 && endpoint === '/') {
+        return { data: {} };
+    }
+
     if (response.headers.get('content-type')?.includes('application/json')) {
         return { data: await response.json() };
     }
@@ -62,6 +78,12 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
   }
 }
 
+export async function testConnection(config: KafkaConnectConfig): Promise<{ error?: string }> {
+    const response = await fetchFromConnect('/', config);
+    return { error: response.error };
+}
+
+
 export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], error?: string }> {
   const response = await fetchFromConnect(`${CLUSTER_PATH}/connectors?expand=status&expand=info`, config);
 
@@ -78,7 +100,6 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     const status = connectorData.status;
     const info = connectorData.info;
 
-    // A connector might not have status or info if it's in a strange state.
     if (!status || !info || !status.connector) {
         console.warn(`Skipping connector ${name} due to missing status or info`);
         continue;
@@ -98,7 +119,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
       id: name,
       name: name,
       status: status.connector.state as ConnectorStatus,
-      type: status.type,
+      type: info.type as ConnectorType,
       plugin: info.config['connector.class'],
       tasks: tasks,
       config: info.config,
