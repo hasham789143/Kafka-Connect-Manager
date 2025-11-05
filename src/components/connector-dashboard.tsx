@@ -13,6 +13,7 @@ import { ConnectorTable } from "./connector-table";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 import { ImportExportDialog } from "./import-export-dialog";
 import { ErrorAnalysisDialog } from "./error-analysis-dialog";
+import { AddKafkaContainerDialog } from "./add-kafka-container-dialog";
 
 type ConnectorDashboardProps = {
   connectors: Connector[];
@@ -23,6 +24,7 @@ export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorD
   const [createOpen, setCreateOpen] = React.useState(false);
   const [importExportOpen, setImportExportOpen] = React.useState(false);
   const [analysisConnector, setAnalysisConnector] = React.useState<Connector | null>(null);
+  const [addKafkaContainerOpen, setAddKafkaContainerOpen] = React.useState(false);
 
   const filteredConnectors = React.useMemo(() => {
     if (!searchTerm) return initialConnectors;
@@ -63,6 +65,10 @@ export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorD
               <ArrowRightLeft />
               Import / Export
             </Button>
+            <Button className="flex-1" onClick={() => setAddKafkaContainerOpen(true)}>
+              <PlusCircle />
+              Add Kafka Container
+            </Button>
             <Button className="flex-1" onClick={() => setCreateOpen(true)}>
               <PlusCircle />
               Create Connector
@@ -77,6 +83,7 @@ export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorD
 
       <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} />
       <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} />
+      <AddKafkaContainerDialog open={addKafkaContainerOpen} onOpenChange={setAddKafkaContainerOpen} />
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
         open={!!analysisConnector} 
