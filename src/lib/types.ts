@@ -1,6 +1,6 @@
 export type Task = {
   id: number;
-  state: 'RUNNING' | 'PAUSED' | 'FAILED';
+  state: 'RUNNING' | 'PAUSED' | 'FAILED' | 'UNASSIGNED';
   worker_id: string;
   trace?: string;
 };

@@ -1,6 +1,7 @@
 'use server';
 
 import { analyzeError } from '@/ai/flows/error-analysis';
+import { getConnectors, KafkaConnectConfig } from '@/lib/data';
 
 export async function getErrorAnalysis(errorMessage: string) {
   if (!errorMessage) {
@@ -16,4 +17,8 @@ export async function getErrorAnalysis(errorMessage: string) {
       error: 'An unexpected error occurred during analysis. Please try again later.',
     };
   }
+}
+
+export async function getConnectorsAction(config: KafkaConnectConfig) {
+    return getConnectors(config);
 }

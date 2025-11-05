@@ -2,40 +2,92 @@
 
 import * as React from "react";
 import { Connector } from "@/lib/types";
+import { KafkaConnectConfig } from "@/lib/data";
+import { getConnectorsAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowRightLeft,
   PlusCircle,
   Search,
+  Terminal,
+  Loader2,
 } from "lucide-react";
 import { ConnectorTable } from "./connector-table";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 import { ImportExportDialog } from "./import-export-dialog";
 import { ErrorAnalysisDialog } from "./error-analysis-dialog";
 import { AddKafkaContainerDialog } from "./add-kafka-container-dialog";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-type ConnectorDashboardProps = {
-  connectors: Connector[];
-};
+const KAFKA_CONNECT_CONFIG_KEY = 'kafka-connect-config';
 
-export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorDashboardProps) {
+export function ConnectorDashboard() {
+  const [connectors, setConnectors] = React.useState<Connector[]>([]);
+  const [config, setConfig] = React.useState<KafkaConnectConfig | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [importExportOpen, setImportExportOpen] = React.useState(false);
   const [analysisConnector, setAnalysisConnector] = React.useState<Connector | null>(null);
   const [addKafkaContainerOpen, setAddKafkaContainerOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    try {
+      const storedConfig = localStorage.getItem(KAFKA_CONNECT_CONFIG_KEY);
+      if (storedConfig) {
+        const parsedConfig = JSON.parse(storedConfig);
+        setConfig(parsedConfig);
+      } else {
+        setAddKafkaContainerOpen(true);
+        setLoading(false);
+      }
+    } catch (e) {
+      console.error("Could not parse kafka config from local storage", e);
+      setAddKafkaContainerOpen(true);
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchConnectors = React.useCallback(async (currentConfig: KafkaConnectConfig) => {
+    setLoading(true);
+    setError(null);
+    const { connectors: fetchedConnectors, error: fetchError } = await getConnectorsAction(currentConfig);
+    if (fetchError) {
+      setError(fetchError);
+    } else {
+      setConnectors(fetchedConnectors || []);
+    }
+    setLoading(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (config) {
+      fetchConnectors(config);
+    }
+  }, [config, fetchConnectors]);
+  
+  const handleConfigSave = (newConfig: KafkaConnectConfig) => {
+    try {
+        localStorage.setItem(KAFKA_CONNECT_CONFIG_KEY, JSON.stringify(newConfig));
+    } catch (e) {
+        console.error("Could not save kafka config to local storage", e);
+    }
+    setConfig(newConfig);
+    setAddKafkaContainerOpen(false);
+  };
+
   const filteredConnectors = React.useMemo(() => {
-    if (!initialConnectors) return [];
-    if (!searchTerm) return initialConnectors;
-    return initialConnectors.filter(
+    if (!connectors) return [];
+    if (!searchTerm) return connectors;
+    return connectors.filter(
       (c) =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.type.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm, initialConnectors]);
+  }, [searchTerm, connectors]);
   
   const handleAnalyzeError = (connector: Connector) => {
     setAnalysisConnector(connector);
@@ -77,14 +129,39 @@ export function ConnectorDashboard({ connectors: initialConnectors }: ConnectorD
           </div>
         </div>
       </header>
-
-      <div className="mt-6">
-        <ConnectorTable connectors={filteredConnectors} onAnalyzeError={handleAnalyzeError} />
-      </div>
+      
+      <main className="mt-6">
+        {loading && (
+            <div className="flex items-center justify-center py-12">
+                <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                <span className="text-lg">Loading connectors...</span>
+            </div>
+        )}
+        {error && !loading &&(
+            <Alert variant="destructive" className="mt-6">
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Failed to load connectors</AlertTitle>
+              <AlertDescription>
+                {error}
+                <Button variant="link" className="p-0 h-auto ml-2" onClick={() => setAddKafkaContainerOpen(true)}>
+                    Update Connection Details
+                </Button>
+              </AlertDescription>
+            </Alert>
+        )}
+        {!loading && !error && (
+            <ConnectorTable connectors={filteredConnectors} onAnalyzeError={handleAnalyzeError} />
+        )}
+      </main>
 
       <CreateConnectorDialog open={createOpen} onOpenChange={setCreateOpen} />
       <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} />
-      <AddKafkaContainerDialog open={addKafkaContainerOpen} onOpenChange={setAddKafkaContainerOpen} />
+      <AddKafkaContainerDialog 
+        open={addKafkaContainerOpen} 
+        onOpenChange={setAddKafkaContainerOpen}
+        onSave={handleConfigSave}
+        currentConfig={config}
+      />
       <ErrorAnalysisDialog 
         connector={analysisConnector} 
         open={!!analysisConnector} 

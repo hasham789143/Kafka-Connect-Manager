@@ -1,12 +1,16 @@
 import type { Connector, ConnectorStatus, Task } from './types';
 
-async function fetchFromConnect(endpoint: string) {
-  const url = process.env.KAFKA_CONNECT_URL;
-  const username = process.env.KAFKA_CONNECT_USERNAME;
-  const password = process.env.KAFKA_CONNECT_PASSWORD;
+export type KafkaConnectConfig = {
+  url: string;
+  username?: string;
+  password?: string;
+};
+
+async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
+  const { url, username, password } = config;
 
   if (!url) {
-    console.error('KAFKA_CONNECT_URL is not defined in the environment variables.');
+    console.error('KAFKA_CONNECT_URL is not defined.');
     return { error: 'Kafka Connect URL is not configured.' };
   }
 
@@ -19,45 +23,56 @@ async function fetchFromConnect(endpoint: string) {
   }
 
   try {
-    const response = await fetch(`${url}${endpoint}`, { headers });
+    const response = await fetch(`${url}${endpoint}`, { headers, cache: 'no-store' });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Failed to fetch from ${endpoint}: ${response.status} ${response.statusText}`, errorText);
-       if (response.status === 403) {
-        return { error: `Connection to Kafka Connect API at ${url} was forbidden. Please check network access and credentials.` };
+       if (response.status === 401 || response.status === 403) {
+        return { error: `Connection to Kafka Connect API at ${url} was forbidden/unauthorized. Please check credentials.` };
       }
       return { error: `Failed to fetch from Kafka Connect API at ${endpoint}. Status: ${response.status}.` };
     }
     
-    try {
-      return { data: await response.json() };
-    } catch(e) {
-      // The GIST of this is that the kafka connect API sometimes returns non-json on success
-      return { data: await response.text() };
+    if (response.headers.get('content-type')?.includes('application/json')) {
+        return { data: await response.json() };
     }
+    return { data: await response.text() };
+
   } catch (e: any) {
     console.error(`Network error when fetching from ${endpoint}:`, e);
+    // Check for common fetch errors
+    if (e.cause?.code === 'ENOTFOUND') {
+        return { error: `Could not resolve the address for the Kafka Connect API at ${url}. Please check the URL and your network connection.` };
+    }
+    if (e instanceof TypeError && e.message.includes('fetch failed')) {
+       return { error: `Network error when fetching from ${url}. The host may be down or a firewall may be blocking the connection.`};
+    }
     return { error: `Could not connect to Kafka Connect API at ${url}. Please check if the service is running and accessible.` };
   }
 }
 
-export async function getConnectors(): Promise<{ connectors?: Connector[], error?: string }> {
-  const connectorsResponse = await fetchFromConnect('/connectors');
+export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], error?: string }> {
+  const connectorsResponse = await fetchFromConnect('/connectors', config);
 
-  if (connectorsResponse.error) {
-    return { error: connectorsResponse.error };
+  if (connectorsResponse.error || !connectorsResponse.data) {
+    return { error: connectorsResponse.error || 'Failed to fetch connectors.' };
   }
-  const connectorNames = connectorsResponse.data;
 
-  const connectorDetailsPromises = Object.keys(connectorNames).map(async (name: string) => {
-    const statusResponse = await fetchFromConnect(`/connectors/${name}/status`);
+  // Kafka Connect returns an empty object {} if there are no connectors.
+  // It returns an array of names if there are connectors. Handle both cases.
+  const connectorData = connectorsResponse.data;
+  const connectorNames = Array.isArray(connectorData) ? connectorData : Object.keys(connectorData);
+
+
+  const connectorDetailsPromises = connectorNames.map(async (name: string) => {
+    const statusResponse = await fetchFromConnect(`/connectors/${name}/status`, config);
     if (statusResponse.error) return { id: name, name, error: statusResponse.error };
-    const configResponse = await fetchFromConnect(`/connectors/${name}/config`);
+    const configResponse = await fetchFromConnect(`/connectors/${name}/config`, config);
     if (configResponse.error) return { id: name, name, error: configResponse.error };
 
     const status = statusResponse.data;
-    const config = configResponse.data;
+    const connectorConfig = configResponse.data;
 
     const tasks: Task[] = status.tasks.map((task: any) => ({
       id: task.id,
@@ -73,9 +88,9 @@ export async function getConnectors(): Promise<{ connectors?: Connector[], error
       name: status.name,
       status: status.connector.state as ConnectorStatus,
       type: status.type,
-      plugin: config['connector.class'],
+      plugin: connectorConfig['connector.class'],
       tasks: tasks,
-      config: config,
+      config: connectorConfig,
       errorMessage: failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\n') : undefined,
       topics: status.tasks.flatMap((t: any) => t.topics || []),
     };

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,9 +23,10 @@ import {
   FormMessage,
 } from "./ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { KafkaConnectConfig } from "@/lib/data";
 
 const formSchema = z.object({
-  kafkaUrl: z.string().url("Please enter a valid URL."),
+  url: z.string().url("Please enter a valid URL."),
   username: z.string().optional(),
   password: z.string().optional(),
 });
@@ -33,42 +34,60 @@ const formSchema = z.object({
 type AddKafkaContainerDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSave: (config: KafkaConnectConfig) => void;
+  currentConfig: KafkaConnectConfig | null;
 };
 
-export function AddKafkaContainerDialog({ open, onOpenChange }: AddKafkaContainerDialogProps) {
+export function AddKafkaContainerDialog({ open, onOpenChange, onSave, currentConfig }: AddKafkaContainerDialogProps) {
   const { toast } = useToast();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      kafkaUrl: "https://poc-kafka.vitonta.com/",
+      url: "https://poc-kafka.vitonta.com/",
       username: "admin",
       password: "P@ssw0rd@kafka",
     },
   });
 
+  React.useEffect(() => {
+    if (open && currentConfig) {
+      form.reset(currentConfig);
+    } else if (open) {
+      form.reset({
+        url: "https://poc-kafka.vitonta.com/",
+        username: "admin",
+        password: "P@ssw0rd@kafka",
+      });
+    }
+  }, [open, currentConfig, form]);
+
+
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    toast({
-      title: "Kafka Container Submitted",
-      description: "Your Kafka container details have been saved.",
+    onSave({
+        url: values.url,
+        username: values.username,
+        password: values.password
     });
-    onOpenChange(false);
+    toast({
+      title: "Kafka Connection Saved",
+      description: "Your Kafka connection details have been saved.",
+    });
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Kafka Container</DialogTitle>
+          <DialogTitle>Kafka Connection Details</DialogTitle>
           <DialogDescription>
-            Enter the details for your Kafka container.
+            Enter the details for your Kafka Connect instance.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="kafkaUrl"
+              name="url"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kafka Connect URL</FormLabel>
@@ -109,7 +128,7 @@ export function AddKafkaContainerDialog({ open, onOpenChange }: AddKafkaContaine
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Add Container</Button>
+              <Button type="submit">Save & Connect</Button>
             </DialogFooter>
           </form>
         </Form>
