@@ -7,7 +7,7 @@ export type KafkaConnectConfig = {
   password?: string;
 };
 
-const CLUSTER_PATH = '/api/clusters/local';
+const CLUSTER_PATH = '/clusters/local';
 
 async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
   const { url, username, password } = config;
@@ -79,7 +79,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     const info = connectorData.info;
 
     // A connector might not have status or info if it's in a strange state.
-    if (!status || !info) {
+    if (!status || !info || !status.connector) {
         console.warn(`Skipping connector ${name} due to missing status or info`);
         continue;
     }
