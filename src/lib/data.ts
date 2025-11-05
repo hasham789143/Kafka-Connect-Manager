@@ -6,6 +6,8 @@ export type KafkaConnectConfig = {
   password?: string;
 };
 
+const CLUSTER_PATH = '/api/clusters/local';
+
 async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
   const { url, username, password } = config;
 
@@ -60,25 +62,27 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
 }
 
 export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], error?: string }> {
-  const connectorsResponse = await fetchFromConnect('/connectors', config);
+  const connectorsResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors`, config);
 
   if (connectorsResponse.error || !connectorsResponse.data) {
     return { error: connectorsResponse.error || 'Failed to fetch connectors.' };
   }
-
+  
   const connectorData = connectorsResponse.data;
   const connectorNames = Array.isArray(connectorData) ? connectorData : Object.keys(connectorData);
   
   const connectors: Connector[] = [];
 
   for (const name of connectorNames) {
-    const statusResponse = await fetchFromConnect(`/connectors/${name}/status`, config);
+    const statusResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors/${name}/status`, config);
     if (statusResponse.error) {
-      return { error: statusResponse.error };
+      // If one connector fails, we can choose to return what we have or fail all.
+      // For now, we fail all to be safe, but we could make this more resilient.
+      return { error: `Failed to get status for connector ${name}: ${statusResponse.error}` };
     }
-    const configResponse = await fetchFromConnect(`/connectors/${name}/config`, config);
+    const configResponse = await fetchFromConnect(`${CLUSTER_PATH}/connectors/${name}/config`, config);
      if (configResponse.error) {
-      return { error: configResponse.error };
+      return { error: `Failed to get config for connector ${name}: ${configResponse.error}` };
     }
 
     const status = statusResponse.data;
