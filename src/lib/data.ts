@@ -15,7 +15,7 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig) {
   }
 
   const headers: HeadersInit = {
-    'Accept': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
   };
 
   if (username && password) {
