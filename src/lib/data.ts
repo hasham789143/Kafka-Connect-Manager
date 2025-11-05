@@ -86,7 +86,7 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     return {
       id: name,
       name: status.name,
-      status: status.connector.state as ConnectorStatus,
+      status: status.connector?.state as ConnectorStatus,
       type: status.type,
       plugin: connectorConfig['connector.class'],
       tasks: tasks,
