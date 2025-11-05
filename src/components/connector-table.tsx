@@ -54,27 +54,10 @@ const statusBadgeVariants: Record<ConnectorStatus, "default" | "secondary" | "de
     UNASSIGNED: 'outline',
 };
 
-const TaskStatusIndicator = ({ task }: { task: Task }) => {
-  const statusIcon = statusIcons[task.state];
-  let tooltipContent = `Task ${task.id} on ${task.worker_id}: ${task.state}`;
-  if (task.state === 'FAILED' && task.trace) {
-    tooltipContent += `\n\nTrace:\n${task.trace}`;
-  }
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="cursor-pointer">{statusIcon}</span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-md whitespace-pre-wrap">
-          <p>{tooltipContent}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
+const RunningTasks = ({ tasks }: { tasks: Task[] }) => {
+    const runningCount = tasks.filter(t => t.state === 'RUNNING').length;
+    return <span>{runningCount} of {tasks.length}</span>
+}
 
 type ConnectorTableProps = {
   connectors: Connector[];
@@ -113,12 +96,12 @@ export function ConnectorTable({ connectors, onAnalyzeError, selectedConnectors,
                   aria-label="Select all rows"
                 />
               </TableHead>
-              <TableHead>Status</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Tasks</TableHead>
+              <TableHead>Plugin</TableHead>
               <TableHead>Topics</TableHead>
-              <TableHead className="hidden md:table-cell">Plugin</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Running Tasks</TableHead>
               <TableHead>
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -135,12 +118,6 @@ export function ConnectorTable({ connectors, onAnalyzeError, selectedConnectors,
                       aria-label={`Select row for ${connector.name}`}
                     />
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadgeVariants[connector.status]} className="gap-1.5 pl-1.5">
-                      {statusIcons[connector.status]}
-                      {connector.status}
-                    </Badge>
-                  </TableCell>
                   <TableCell className="font-medium">{connector.name}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -148,15 +125,19 @@ export function ConnectorTable({ connectors, onAnalyzeError, selectedConnectors,
                         <span className="capitalize">{connector.type}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      {connector.tasks.map(task => <TaskStatusIndicator key={task.id} task={task} />)}
-                    </div>
-                  </TableCell>
+                  <TableCell className="max-w-xs truncate">{connector.plugin}</TableCell>
                   <TableCell>
                     {connector.topics.map(topic => <Badge key={topic} variant="outline" className="mr-1 mb-1">{topic}</Badge>)}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell max-w-xs truncate">{connector.plugin}</TableCell>
+                  <TableCell>
+                    <Badge variant={statusBadgeVariants[connector.status]} className="gap-1.5 pl-1.5">
+                      {statusIcons[connector.status]}
+                      {connector.status}
+                    </Badge>
+                  </TableCell>
+                   <TableCell>
+                     <RunningTasks tasks={connector.tasks} />
+                  </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

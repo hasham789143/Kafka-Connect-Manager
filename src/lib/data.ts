@@ -1,5 +1,5 @@
 
-import type { Connector, ConnectorStatus, ConnectorType, Task } from './types';
+import type { Connector, ConnectorStatus, ConnectorType, Task, DashboardStats } from './types';
 
 export type KafkaConnectConfig = {
   url: string;
@@ -56,8 +56,7 @@ async function fetchFromConnect(endpoint: string, config: KafkaConnectConfig, me
       }
     }
     
-    // Handle empty response for validation
-    if (response.status === 200 && (endpoint === '/' || endpoint === '')) {
+    if (endpoint === '/' || endpoint === '') {
         return { data: {} };
     }
     
@@ -93,7 +92,7 @@ export async function testConnection(config: KafkaConnectConfig): Promise<{ erro
 }
 
 
-export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], error?: string }> {
+export async function getConnectors(config: KafkaConnectConfig): Promise<{ connectors?: Connector[], stats?: DashboardStats, error?: string }> {
   const response = await fetchFromConnect(`${CLUSTER_PATH}/connectors?expand=status&expand=info`, config);
 
   if (response.error || !response.data) {
@@ -103,6 +102,8 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
   const data = response.data;
   const connectorNames = Object.keys(data);
   const connectors: Connector[] = [];
+  let failedConnectors = 0;
+  let failedTasks = 0;
 
   for (const name of connectorNames) {
     const connectorData = data[name];
@@ -120,14 +121,25 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
       worker_id: task.worker_id,
       trace: task.trace,
     }));
+    
+    const connectorStatus = status.connector.state as ConnectorStatus;
+    if (connectorStatus === 'FAILED') {
+      failedConnectors++;
+    }
 
-    const failedTasks = tasks.filter(t => t.state === 'FAILED');
-    const errorMessage = failedTasks.length > 0 ? failedTasks.map(t => t.trace).join('\\n') : undefined;
+    tasks.forEach(task => {
+        if (task.state === 'FAILED') {
+            failedTasks++;
+        }
+    });
+
+    const hasFailedTasks = tasks.some(t => t.state === 'FAILED');
+    const errorMessage = hasFailedTasks ? tasks.filter(t => t.state === 'FAILED').map(t => t.trace).join('\n') : undefined;
 
     connectors.push({
       id: name,
       name: name,
-      status: status.connector.state as ConnectorStatus,
+      status: connectorStatus,
       type: info.type as ConnectorType,
       plugin: info.config['connector.class'],
       tasks: tasks,
@@ -137,7 +149,13 @@ export async function getConnectors(config: KafkaConnectConfig): Promise<{ conne
     });
   }
 
-  return { connectors };
+  const stats: DashboardStats = {
+    totalConnectors: connectors.length,
+    failedConnectors: failedConnectors,
+    failedTasks: failedTasks,
+  };
+
+  return { connectors, stats };
 }
 
 export async function createConnector(config: KafkaConnectConfig, name: string, connectorConfig: any) {

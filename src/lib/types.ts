@@ -20,3 +20,9 @@ export type Connector = {
   config: Record<string, string>;
   errorMessage?: string;
 };
+
+export type DashboardStats = {
+  totalConnectors: number;
+  failedConnectors: number;
+  failedTasks: number;
+};
