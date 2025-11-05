@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { createConnectorAction } from "@/app/actions";
 import * as React from "react";
 import { KafkaConnectConfig } from "@/lib/data";
+import { Loader2 } from "lucide-react";
 
 const KAFKA_CONNECT_CONFIG_KEY = 'kafka-connect-config';
 

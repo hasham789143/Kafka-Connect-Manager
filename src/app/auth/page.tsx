@@ -24,7 +24,7 @@ export default function AuthPage() {
     const router = useRouter();
     const [url, setUrl] = React.useState("https://poc-kafka.vitonta.com/");
     const [username, setUsername] = React.useState("admin");
-    const [password, setPassword] = React.useState("P@ssw0rd@kafka");
+    const [password, setPassword] = React.useState("");
     const [error, setError] = React.useState<string | null>(null);
     const [loading, setLoading] = React.useState(false);
 
@@ -32,10 +32,9 @@ export default function AuthPage() {
         try {
             const storedConfig = localStorage.getItem(KAFKA_CONNECT_CONFIG_KEY);
             if (storedConfig) {
-                const { url, username, password } = JSON.parse(storedConfig);
+                const { url, username } = JSON.parse(storedConfig);
                 setUrl(url || "https://poc-kafka.vitonta.com/");
                 setUsername(username || "admin");
-                setPassword(password || "P@ssw0rd@kafka");
             }
         } catch (e) {
             console.error("Could not parse kafka config from local storage", e);
@@ -55,11 +54,12 @@ export default function AuthPage() {
             } catch (e) {
                 console.error("Could not save kafka config to local storage", e);
                 setError("Failed to save connection details to your browser's local storage.");
+                setLoading(false);
             }
         } else {
             setError(result.error || "An unknown error occurred during validation.");
+            setLoading(false);
         }
-        setLoading(false);
     };
 
   return (
